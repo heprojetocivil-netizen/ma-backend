@@ -301,6 +301,37 @@ app.get('/api/admin/afiliados', adminAuth, async (req, res) => {
   }
 });
 
+// Creditar MA Coins manualmente (sorteio, bônus, etc.)
+app.post('/api/admin/creditar-coins', adminAuth, async (req, res) => {
+  const { nick, coins, motivo } = req.body;
+  if (!nick || !coins || coins <= 0) {
+    return res.status(400).json({ erro: 'nick e coins (> 0) são obrigatórios' });
+  }
+  try {
+    // Garante que afiliado existe
+    await pool.query(
+      `INSERT INTO affiliates (nick) VALUES ($1) ON CONFLICT (nick) DO NOTHING`,
+      [nick.toLowerCase()]
+    );
+    // Credita direto como confirmado
+    await pool.query(
+      `UPDATE affiliates SET coins_confirmed = coins_confirmed + $1 WHERE nick = $2`,
+      [parseInt(coins), nick.toLowerCase()]
+    );
+    // Registra no histórico de referrals com motivo
+    await pool.query(
+      `INSERT INTO referrals (ref_nick, buyer_nick, payment_id, coins, status, confirmed_at)
+       VALUES ($1, 'admin', $2, $3, 'confirmed', $4)`,
+      [nick.toLowerCase(), motivo || 'credito-manual', parseInt(coins), Math.floor(Date.now()/1000)]
+    );
+    console.log(`Admin creditou ${coins} MA Coins para ${nick} — motivo: ${motivo || 'manual'}`);
+    res.json({ ok: true, msg: `${coins} MA Coins creditados para ${nick}.` });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ erro: 'Erro interno' });
+  }
+});
+
 // Lista referrals (para debug)
 app.get('/api/admin/referrals', adminAuth, async (req, res) => {
   try {
