@@ -47,6 +47,12 @@ async function initDB() {
         created_at BIGINT DEFAULT EXTRACT(EPOCH FROM NOW())::BIGINT,
         paid_at BIGINT
       );
+
+      CREATE TABLE IF NOT EXISTS buyers (
+        nick TEXT PRIMARY KEY,
+        payment_id TEXT,
+        created_at BIGINT DEFAULT EXTRACT(EPOCH FROM NOW())::BIGINT
+      );
     `);
     console.log('DB pronto.');
   } finally {
