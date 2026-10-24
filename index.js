@@ -101,6 +101,14 @@ app.post('/webhook/mp', async (req, res) => {
       [COINS_POR_VENDA, pv.ref_nick]
     );
 
+    // Registra comprador para liberar acesso premium
+    if (pv.buyer_nick) {
+      await pool.query(
+        `INSERT INTO buyers (nick, payment_id) VALUES ($1, $2) ON CONFLICT (nick) DO NOTHING`,
+        [pv.buyer_nick, paymentId]
+      );
+    }
+
     console.log(`Referral registrado: ${pv.ref_nick} → +${COINS_POR_VENDA} coins pendentes`);
     res.sendStatus(200);
   } catch (e) {
@@ -222,6 +230,39 @@ app.post('/api/afiliado/:nick/solicitar-saque', async (req, res) => {
       msg: `Saque de R$ ${coinsParaSacar},00 solicitado! Aguarde até 3 dias úteis.`,
       coins: coinsParaSacar
     });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ erro: 'Erro interno' });
+  }
+});
+
+// ─── VERIFICAR SE NICK É PREMIUM (comprou) ───────────────────────────
+// Consulta tabela de compradores para verificar pagamento confirmado
+app.get('/api/comprador/:nick/verificar', async (req, res) => {
+  const nick = req.params.nick.toLowerCase();
+  try {
+    const r = await pool.query(
+      `SELECT id FROM buyers WHERE nick = $1 LIMIT 1`,
+      [nick]
+    );
+    res.json({ premium: r.rows.length > 0 });
+  } catch (e) {
+    // Se tabela não existe ainda, retorna false sem erro
+    res.json({ premium: false });
+  }
+});
+
+// ─── REGISTRAR COMPRADOR (chamado pelo webhook após pagamento) ────────
+// Salva o nick do comprador para liberar acesso premium
+app.post('/api/comprador/registrar', async (req, res) => {
+  const { nick, payment_id } = req.body;
+  if (!nick) return res.status(400).json({ erro: 'nick obrigatório' });
+  try {
+    await pool.query(
+      `INSERT INTO buyers (nick, payment_id) VALUES ($1, $2) ON CONFLICT (nick) DO NOTHING`,
+      [nick.toLowerCase(), payment_id || null]
+    );
+    res.json({ ok: true });
   } catch (e) {
     console.error(e);
     res.status(500).json({ erro: 'Erro interno' });
